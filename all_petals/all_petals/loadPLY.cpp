@@ -5,7 +5,8 @@ loadPLY::loadPLY()
 {
 }
 
-loadPLY::loadPLY(string filename){
+loadPLY::loadPLY(string filename,string tex){
+	tex_file = tex;
 	bool res = OpenMesh::IO::read_mesh(mesh, filename);
 	if (!res)  return;
 
@@ -101,6 +102,32 @@ void loadPLY::Analyse(){
 	axis.push_back(single_petal - 1);
 
 	//int a=0;
+
+	//纹理坐标
+	tex.clear();
+
+	ifstream fin(tex_file, std::ios::in);
+
+	char line[1024] = { 0 };
+	string x = "";
+	string y = "";
+	while (fin.getline(line, sizeof(line)))//读取采样点坐标
+	{
+		stringstream word(line);
+		word >> x;
+		word >> y;
+
+		int a,b;
+		a = atoi(x.c_str());
+		b = atoi(y.c_str());
+
+		QPoint p(a,b);
+
+		tex.push_back(p);
+	}
+	fin.clear();
+	fin.close();
+
 	return;
 
 }
@@ -129,4 +156,8 @@ int loadPLY::getPetal_num(){
 
 int loadPLY::getPetal_single(){
 	return single_petal;
+}
+
+vector<QPoint> loadPLY::getTexture(){
+	return tex;
 }

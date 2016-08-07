@@ -11,7 +11,7 @@ MyGL::MyGL()
 	translationZ = 0;
 
 	//加载网格
-	ply = loadPLY("all4.ply");
+	ply = loadPLY("all.ply","texture.txt");
 	ply.Analyse();
 	points = ply.getPoints();
 	lastPPos = points;
@@ -20,6 +20,7 @@ MyGL::MyGL()
 	axis = ply.getAxisIndex();
 	petal_num = ply.getPetal_num();
 	single_petal = ply.getPetal_single();
+	tex_coor = ply.getTexture();
 
 	//初始化lastData
 	for (int i = 0; i < points.size(); i++){
@@ -36,14 +37,18 @@ MyGL::MyGL()
 	h = points.front().z + 5;//高度
 	distance = sqrtf(pow(points.front().x, 2) + pow(points.front().y, 2));
 	
+	wind = WindArea();
 
 
 	//Fw = {0,0,20};
 	Fw = { 0, 0, 0 };
 	lastFw = { 0, 0, 0 };
 
-	startTimer(50);//开启计时器，单位ms
-
+	startTimer(10);//开启计时器，单位ms
+	starttime = clock();
+	windinfo = wind.Wind_Whirl_Init();//旋风
+	//crossinfo = wind.Wind_Cross_Init();//定向
+	deltatime = 0;
 
 }
 
@@ -53,12 +58,48 @@ MyGL::~MyGL()
 {
 }
 
+void MyGL::loadGLTexture()
+{
+	QImage tex, buf;
+	if (!buf.load("egg.jpg")){
+		QImage dummy(128, 128, QImage::Format_RGB32);
+		dummy.fill(QColor(Qt::green).rgb());
+		buf = dummy;
+	}
+
+	tex = QGLWidget::convertToGLFormat(buf);
+
+	//创建一个纹理名字
+	glGenTextures(1, &texture[0]);
+	//将纹理名字绑定到目标上
+	glBindTexture(GL_TEXTURE_2D, texture[0]);
+	//创建纹理
+	glTexImage2D(GL_TEXTURE_2D, 0, 3, tex.width(), tex.height(), 0,
+		GL_RGBA, GL_UNSIGNED_BYTE, tex.bits());
+
+	gheight = tex.height();//图片高度
+	gwidth = tex.width();//图片宽度
+
+	//设置显示图像时的放大、缩小的滤波方式
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+}
 
 
 void MyGL::initializeGL()
 {
 
 	setGeometry(300, 150, 800, 600);//设置窗口初始位置和大小
+	
+	/*
+	//载入纹理
+	loadGLTexture();
+	//启用纹理
+	glEnable(GL_TEXTURE_2D);
+	*/
+	
+	
+	
 
 	//qglClearColor(Qt::black);
 	glClearColor(0.0, 0.0, 0.0, 0);
@@ -165,27 +206,134 @@ void MyGL::drawMesh()
 		glVertex3f((GLfloat)c.x, (GLfloat)c.y, (GLfloat)c.z);
 		glEnd();
 
+		/*
+		 设置纹理坐标和物体几何坐标 
+		glBegin(GL_TRIANGLES);
+		double t[2] = { tex_coor[((int)faces[i].x) % tex_coor.size()].y() / (gwidth*1.0), (gheight - tex_coor[((int)faces[i].x) % tex_coor.size()].x()) / (gheight*1.0) };
+		glTexCoord2f(tex_coor[((int)faces[i].x) % tex_coor.size()].y() / (gwidth*1.0), (gheight - tex_coor[((int)faces[i].x) % tex_coor.size()].x()) / (gheight*1.0));
+		glVertex3f((GLfloat)a.x, (GLfloat)a.y, (GLfloat)a.z);
+
+		double t1[2] = { tex_coor[((int)faces[i].y) % tex_coor.size()].y() / (gwidth*1.0), (gheight - tex_coor[((int)faces[i].y) % tex_coor.size()].x()) / (gheight*1.0) };
+		glTexCoord2f(tex_coor[((int)faces[i].y) % tex_coor.size()].y() / (gwidth*1.0), (gheight - tex_coor[((int)faces[i].y) % tex_coor.size()].x()) / (gheight*1.0));
+		glVertex3f((GLfloat)b.x, (GLfloat)b.y, (GLfloat)b.z);
+
+		double t2[2] = { tex_coor[((int)faces[i].z) % tex_coor.size()].y() / (gwidth*1.0), (gheight - tex_coor[((int)faces[i].z) % tex_coor.size()].x()) / (gheight*1.0) };
+		glTexCoord2f(tex_coor[((int)faces[i].z) % tex_coor.size()].y() / (gwidth*1.0), (gheight - tex_coor[((int)faces[i].z) % tex_coor.size()].x()) / (gheight*1.0));
+		glVertex3f((GLfloat)c.x, (GLfloat)c.y, (GLfloat)c.z);
+
+
+		glEnd();
+		*/
+		
+		
+
+
 
 		//rotationZ += 0.2;
 	}
 
 
-	
+	/*
 	t++;
 
 	lastFw = Fw;
-  Fw = { -10 - 2 * sin(0.1 * t + 1), 0, 0 };
+	Fw = {  5 * sin(0.1 * t ), 0, 0 };
 //	Fw = { 0, 0,  -2 * sin(0.1*t + 1)};
-//	Fw = { 0, -2 * sin(0.1*t + 1), 0 };
+//	Fw = { 0, -2 * sin(0.1*t ), 0 };
+
+	*/
+
+	nowtime = clock();
+	lastdeltatime = deltatime;
+	deltatime = (double)(nowtime - starttime); //需要获取风力时，先利用clock获得此时的时间
+
+	for (int j = 0; j < petal_num; j++)
+	{
+		int offset = j*single_petal;//偏移量
+		Vec2f coord;
+		coord[0] = points[offset].x;
+		coord[1] = points[offset].y;
+		
+
+		//代入函数求解风力，这里代入的是计算旋风场的风力，返回值（x方向，y方向，风力）其中x与y正交
+		Vec3f windforce = wind.Whirl_Wind_Caculate(windinfo, coord, (int)deltatime);
+		Vec3f windforcelast = wind.Whirl_Wind_Caculate(windinfo, coord, (int)lastdeltatime);
+		//Vec3f windforce = wind.Cross_Wind_Caculate(crossinfo, coord, (int)deltatime);
+		//Vec3f windforcelast = wind.Cross_Wind_Caculate(crossinfo, coord, (int)lastdeltatime);
+
+		
+		if (j == 0)
+		{
+			testclock[count] = deltatime;
+			testforce[count] = windforce[2];
+			count++;
+		}
+		if (count == 1000)
+		{
+			count = 1;
+		}
+
+		Fw = { windforce[0] * windforce[2], windforce[1] * windforce[2], 0 };
+		lastFw = { windforcelast[0] * windforcelast[2], windforcelast[1] * windforcelast[2], 0 };
+
+		double Fw1 = sqrtf(pow(Fw.x, 2) + pow(Fw.y, 2) + pow(Fw.z, 2));
+		double lastFw1 = sqrtf(pow(lastFw.x, 2) + pow(lastFw.y, 2) + pow(lastFw.z, 2));
+
+		//如果风力减为0或者反向了，所有复位
+		if ((dot(Fw, lastFw) < 0) || (fabs(Fw1) < 0.15))
+		{
+			lastPPos = points;
+			for (int i = 0; i < single_petal; i++)
+			{
+				lastData[i+offset][0] = { 0, 0, 0 };
+				lastData[i+offset][1] = { 0, 0, 0 };
+			}
+		}
+		else if (Fw1 >= lastFw1)
+		{
+			flag_resume = false;
+			if (checkThreshold(offset))
+			{
+				//求解下一帧
+
+				for (int i = axis.size() - 2; i > 0; i--)
+				{
+					if (checkThreshold(offset))
+					{
+						//求解下一帧
+						caculateAxisMove(axis[i] + offset, offset);
+					}
+				}
+
+			}
+		}
+		else//力减小，开始恢复
+		{
+			flag_resume = true;
+			resume(offset);
+		
+		}
+
+
+	}
 
 
 
-	double Fw1 = sqrtf(pow(Fw.x, 2) + pow(Fw.y, 2) + pow(Fw.z, 2));
-	double lastFw1 = sqrtf(pow(lastFw.x, 2) + pow(lastFw.y, 2) + pow(lastFw.z, 2));
 
+	
+
+	/*
 	//力增大
-	if (Fw1 == 0)
+	//如果风力减为0或者反向了，所有复位
+	if ((dot(Fw, lastFw) < 0) || (fabs(Fw1) < 0.15))
+	{
 		lastPPos = points;
+		for (int i = 0; i < points.size(); i++){
+			lastData[i][0]={ 0, 0, 0 };
+			lastData[i][1] = { 0, 0, 0 };
+		}
+
+	}
 	//else if (Fw1 == lastFw1)
 	//lastPPos = lastPPos;
 	else if (Fw1 >= lastFw1)
@@ -218,23 +366,15 @@ void MyGL::drawMesh()
 		for (int j = 0; j < petal_num; j++)//每个花瓣
 		{
 			int offset = j*single_petal;//偏移量
-			//求解下一帧
-			for (int i = axis.size() - 2; i > 0; i--)
-			{
-				resume(offset);
+			
+			resume(offset);
 					
-			}
 		}
 		
 
 	}
 
-
-
-
-
-	
-
+	*/
 
 
 	glPointSize(1);
@@ -353,8 +493,8 @@ void MyGL::caculateAxisMove(int index,int offset)//计算该帧位移
 	double T2 = dot(cross(r, Fw), v2);
 
 	//质量 刚度 阻尼
-	double m = (index + 3) * 100;//质量
-	double K = (index + 2)*(index + 4) * 5 / l;//刚度
+	double m = (index + 3) * 150;//质量
+	double K = (index + 2)*(index + 4) * 50 / l;//刚度
 	double D = 1.2*K + (p_length*p_width) / 5000;//阻尼
 
 	//转动惯量
@@ -375,8 +515,6 @@ void MyGL::caculateAxisMove(int index,int offset)//计算该帧位移
 		info2.y = -0.001;
 	else if (fabs(info2.y) < 1e-7&&a2 > 0)
 		info2.y = 0.001;
-
-
 
 
 	//角速度
@@ -406,9 +544,6 @@ void MyGL::caculateAxisMove(int index,int offset)//计算该帧位移
 	angle2 = -5 * info2.y*delta;
 	}
 	*/
-
-
-
 
 	coor rotated = PointRotate(v1, lastPPos[index], angle1);//沿着方向1旋转
 	rotated = PointRotate(v2, rotated, angle2);//沿着方向2旋转
@@ -677,9 +812,6 @@ bool MyGL::checkThreshold(int offset)
 	}
 	*/
 
-
-
-
 	return res;
 }
 
@@ -689,7 +821,7 @@ void MyGL::resume(int offset)
 	//引入虚拟弹簧求解平衡位置
 	coor v_s = { points[offset].x - lastPPos[offset].x, points[offset].y - lastPPos[offset].y, points[offset].z - lastPPos[offset].z };//原始位置-当前位置
 	double s = sqrtf(powf(v_s.x, 2) + powf(v_s.y, 2) + powf(v_s.z, 2));
-	//if (fabs(s) < 0.001) s = 0.1;
+	if (fabs(s) < 0.001) s = 0.1;
 
 	coor t = { v_s.x / s, v_s.y / s, v_s.z / s };
 	double Fw1 = -dot(Fw, t);//风力在恢复力方向的反向分量大小

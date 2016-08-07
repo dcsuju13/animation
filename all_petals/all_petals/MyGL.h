@@ -10,6 +10,7 @@
 #include "MyGL.h"
 #include "loadPLY.h"
 #include "global.h"
+#include "WindArea.h"
 #include <QMouseEvent>
 #include<QWheelEvent>  
 #include <QColorDialog>
@@ -46,6 +47,7 @@ public:
 
 private:
 	void initializeGL();
+	void loadGLTexture();
 	void resizeGL(int width, int height);
 	void paintGL();
 	void timerEvent(QTimerEvent *);
@@ -79,6 +81,7 @@ private:
 	vector<coor> faces;//面
 	vector<coor> normals;//法向量
 	vector<int> axis;//中轴索引
+	vector<QPoint> tex_coor;//纹理坐标
 	int petal_num;//花瓣个数
 	int single_petal;//单个花瓣采样点
 
@@ -87,6 +90,7 @@ private:
 
 	coor Fw;//风力
 	coor lastFw;//上一帧的风力
+	double deltatime, lastdeltatime;
 	double h;
 	double distance;
 
@@ -96,9 +100,18 @@ private:
 	bool start = true;//标记是否初始状态，即w=0原因是静止
 	bool flag_resume = false;//标记是否为恢复
 
+	GLuint texture[1];
+	int gwidth, gheight;//图片长宽
 
 	int t = 0;
+	WindArea wind;
+	clock_t starttime, nowtime;
+	vector<Vec3i> windinfo;
+	Vec3i crossinfo;
 
+	int testclock[1000];
+	float testforce[1000];
+	int count = 0;
 
 };
 
